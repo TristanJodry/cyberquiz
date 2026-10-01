@@ -1,0 +1,29 @@
+[Unit]
+Description=CyberQuiz RSE - Plateforme de Sensibilisation Cybersécurité
+Documentation=https://github.com/tristanjodry/cyberquiz
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cyberquiz
+Group=cyberquiz
+WorkingDirectory=/opt/cyberquiz
+EnvironmentFile=/etc/cyberquiz/cyberquiz.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/cyberquiz/node_modules/.bin/tsx /opt/cyberquiz/server.ts
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cyberquiz
+
+# Mesures de durcissement de sécurité
+ProtectSystem=full
+ProtectHome=yes
+ReadWritePaths=/var/lib/cyberquiz
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

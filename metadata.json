@@ -1,0 +1,7 @@
+{
+  "name": "CyberQuiz RSE - Sensibilisation Cybersécurité",
+  "description": "Application web complète de quiz interactif pour la sensibilisation des collaborateurs à la cybersécurité avec tableau de bord administrateur, REX et statistiques RSE.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

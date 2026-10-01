@@ -1,0 +1,36 @@
+version: '3.8'
+
+# ==============================================================================
+# Docker Compose - CyberQuiz RSE
+# Déploiement sur serveur Debian derrière Nginx Proxy Manager
+# ==============================================================================
+
+services:
+  cyberquiz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cyberquiz_app
+    restart: unless-stopped
+    ports:
+      # Liaison d'écoute configurable (0.0.0.0 pour reverse proxy distant, 127.0.0.1 pour local)
+      - "${APP_BIND_IP:-0.0.0.0}:${APP_PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      # Persistance de la base de données SQL relationnelle sur l'hôte Debian
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - cyberquiz_network
+
+networks:
+  cyberquiz_network:
+    driver: bridge
