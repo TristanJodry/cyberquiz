@@ -9,7 +9,7 @@ interface RexViewProps {
     apprisCommentaire: string
   ) => Promise<boolean>;
   isSubmitting: boolean;
-  onGoHome: () => void;
+  onGoHome?: () => void;
 }
 
 export const RexView: React.FC<RexViewProps> = ({ onSubmitRex, isSubmitting, onGoHome }) => {
@@ -57,17 +57,13 @@ export const RexView: React.FC<RexViewProps> = ({ onSubmitRex, isSubmitting, onG
             Merci pour votre participation !
           </h2>
 
-          <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-8">
+          <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-6">
             Votre implication contribue à renforcer notre culture collective de cybersécurité et l’efficacité de nos actions d’engagement citoyen.
           </p>
 
-          <button
-            onClick={onGoHome}
-            className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-teal-300 hover:from-cyan-300 hover:to-teal-200 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all flex items-center justify-center gap-2 text-sm mx-auto cursor-pointer"
-          >
-            <Home className="w-4 h-4" />
-            <span>Retourner à l’accueil</span>
-          </button>
+          <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-200 text-xs sm:text-sm">
+            Vos réponses et votre retour d'expérience ont bien été transmis avec succès. Vous pouvez à présent fermer cet onglet en toute sécurité.
+          </div>
         </div>
       </div>
     );

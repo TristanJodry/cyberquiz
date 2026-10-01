@@ -115,7 +115,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <CheckCircle2 className="w-9 h-9" />
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 text-xs font-semibold">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Participation déjà enregistrée</span>
@@ -127,39 +127,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 Vous avez déjà complété ce quiz de sensibilisation et transmis votre retour d'expérience. Vos réponses ont bien été prises en compte dans le cadre de notre démarche d'engagement citoyen et de cybersécurité.
               </p>
             </div>
-
-            {/* Détail selon le mode de restriction configuré */}
-            {restriction.mode === 'delay' ? (
-              <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-800/40 text-left space-y-2">
-                <div className="flex items-center gap-2 text-cyan-300 font-semibold text-xs uppercase tracking-wider">
-                  <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <span>Période de temporisation active</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Conformément aux paramètres de la campagne, une temporisation de <strong className="text-white">{config?.restriction_jours || 30} jours</strong> est appliquée. Vous pourrez participer de nouveau dans <strong className="text-cyan-300">{restriction.remainingDays} jour{(restriction.remainingDays || 1) > 1 ? 's' : ''}</strong> (à partir du <span className="text-cyan-300 font-medium">{restriction.untilDate}</span>).
-                </p>
-                {restriction.completedAtDate && (
-                  <p className="text-[11px] text-slate-500 pt-1 border-t border-cyan-900/30">
-                    Dernière participation validée le {restriction.completedAtDate}.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-left space-y-2">
-                <div className="flex items-center gap-2 text-cyan-400 font-semibold text-xs uppercase tracking-wider">
-                  <LockKeyhole className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <span>Participation unique par navigateur</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  La campagne est configurée pour limiter la participation à une seule soumission par navigateur afin de préserver l'intégrité globale des retours d'expérience.
-                </p>
-                {restriction.completedAtDate && (
-                  <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-800">
-                    Participation enregistrée le {restriction.completedAtDate}.
-                  </p>
-                )}
-              </div>
-            )}
 
             {/* Reprise de session si une session interrompue est détectée */}
             {hasActiveSession && onResumeSession && (

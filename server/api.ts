@@ -1245,16 +1245,25 @@ router.get('/admin/statistiques', requireAdmin, async (req: AuthRequest, res: Re
       .sort((a, b) => a.tauxReussite - b.tauxReussite)
       .slice(0, 5);
 
-    // 4. Statistiques par entreprise (avec gestion distincte et respectueuse de l'anonymat)
+    // 4. Statistiques par entreprise (avec regroupement insensible à la casse et gestion distincte de l'anonymat)
+    // Permet de regrouper "CESI", "cesi", "Cesi" sous une même et unique entité
     const companyStats = query<{
-      entreprise: string;
+      raw_entreprise: string;
+      norm_entreprise: string;
       anonyme: number;
       nb_participations: number;
       score_moyen: number;
       taux_reussite_moyen: number;
     }>(`
       SELECT 
-        CASE WHEN part.anonyme = 1 THEN 'Participations anonymes' ELSE part.entreprise END as entreprise,
+        CASE 
+          WHEN part.anonyme = 1 THEN 'Participations anonymes' 
+          ELSE TRIM(part.entreprise) 
+        END as raw_entreprise,
+        CASE 
+          WHEN part.anonyme = 1 THEN '__anonyme__' 
+          ELSE LOWER(TRIM(part.entreprise)) 
+        END as norm_entreprise,
         part.anonyme,
         COUNT(p.id) as nb_participations,
         AVG(p.score_final) as score_moyen,
@@ -1262,22 +1271,53 @@ router.get('/admin/statistiques', requireAdmin, async (req: AuthRequest, res: Re
       FROM participants part
       JOIN participations p ON p.participant_id = part.id
       WHERE p.statut IN ('quiz_termine', 'termine') ${dateFilterSql}
-      GROUP BY CASE WHEN part.anonyme = 1 THEN 'Participations anonymes' ELSE part.entreprise END, part.anonyme
+      GROUP BY 
+        CASE WHEN part.anonyme = 1 THEN '__anonyme__' ELSE LOWER(TRIM(part.entreprise)) END, 
+        part.anonyme
       ORDER BY nb_participations DESC
     `);
 
-    // Satisfaction moyenne par entreprise
+    // Satisfaction moyenne par entreprise et harmonisation de la casse (ex: privilégier CESI plutôt que cesi)
     const formattedCompanyStats = companyStats.map(c => {
+      let displayName = c.raw_entreprise;
+
+      if (c.anonyme !== 1) {
+        const allSpellings = query<{ ent: string }>(`
+          SELECT DISTINCT TRIM(part.entreprise) as ent
+          FROM participants part
+          JOIN participations p ON p.participant_id = part.id
+          WHERE part.anonyme = 0 
+            AND LOWER(TRIM(part.entreprise)) = ?
+            AND p.statut IN ('quiz_termine', 'termine') ${dateFilterSql}
+        `, [c.norm_entreprise]);
+
+        if (allSpellings.length > 0) {
+          // Préférer un acronyme tout en majuscules (ex: CESI, SNCF)
+          const uppercaseMatch = allSpellings.find(s => s.ent === s.ent.toUpperCase() && s.ent.length >= 2);
+          if (uppercaseMatch) {
+            displayName = uppercaseMatch.ent;
+          } else {
+            // Sinon préférer une graphie avec la première lettre majuscule
+            const capitalizedMatch = allSpellings.find(s => s.ent[0] === s.ent[0].toUpperCase());
+            displayName = capitalizedMatch ? capitalizedMatch.ent : allSpellings[0].ent;
+          }
+        }
+      }
+
       const avgSat = queryOne<{ avg_note: number }>(`
         SELECT AVG(r.note_satisfaction) as avg_note
         FROM rex r
         JOIN participations p ON p.id = r.participation_id
         JOIN participants part ON part.id = p.participant_id
-        WHERE (part.anonyme = ? AND part.entreprise = ?)
-      `, [c.anonyme, c.anonyme === 1 ? 'Anonyme' : c.entreprise]);
+        WHERE part.anonyme = ? 
+          AND (
+            part.anonyme = 1 
+            OR LOWER(TRIM(part.entreprise)) = ?
+          )
+      `, [c.anonyme, c.norm_entreprise]);
 
       return {
-        entreprise: c.entreprise,
+        entreprise: displayName,
         isAnonyme: c.anonyme === 1,
         nbParticipations: c.nb_participations,
         scoreMoyen: Math.round((c.score_moyen || 0) * 10) / 10,
@@ -1313,12 +1353,12 @@ router.get('/admin/participations', requireAdmin, async (req: AuthRequest, res: 
     const params: any[] = [];
 
     if (search) {
-      whereClause += ` AND (part.nom LIKE ? OR part.prenom LIKE ?)`;
-      params.push(`%${search}%`, `%${search}%`);
+      whereClause += ` AND (part.nom LIKE ? OR part.prenom LIKE ? OR part.entreprise LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
     if (entreprise) {
-      whereClause += ` AND part.entreprise = ?`;
+      whereClause += ` AND LOWER(TRIM(part.entreprise)) = LOWER(TRIM(?))`;
       params.push(entreprise);
     }
 
