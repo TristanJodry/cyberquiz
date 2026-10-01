@@ -287,6 +287,12 @@ chmod 750 "${INSTALL_DIR}"
 chmod 700 "${DATA_DIR}"
 chmod 700 "${BACKUP_DIR}"
 
+# Configuration safe.directory pour éviter l'erreur Git 'dubious ownership' lors de futurs git pull ou ./update.sh
+git config --global --add safe.directory "${INSTALL_DIR}" 2>/dev/null || true
+git config --system --add safe.directory "${INSTALL_DIR}" 2>/dev/null || true
+git config --global --add safe.directory "*" 2>/dev/null || true
+git config --system --add safe.directory "*" 2>/dev/null || true
+
 # Rendre les scripts install et update exécutables
 chmod +x "${INSTALL_DIR}/install.sh" "${INSTALL_DIR}/update.sh" 2>/dev/null || true
 
