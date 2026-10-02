@@ -74,6 +74,11 @@ router.get('/public/config', async (req: Request, res: Response) => {
       "SELECT COUNT(*) as count FROM questions WHERE statut = 'actif'"
     );
 
+    const poolActif = config['pool_actif'] === '1';
+    const poolTaille = parseInt(config['pool_taille'] || '10', 10) || 10;
+    const totalActives = qCountRow ? qCountRow.count : 0;
+    const effectiveQuestionCount = poolActif ? Math.min(poolTaille, totalActives) : totalActives;
+
     res.json({
       titre: config['quiz_titre'] || 'Tous acteurs de notre cybersécurité',
       sous_titre: config['quiz_sous_titre'] || 'Testez vos connaissances et contribuez à une culture numérique plus responsable.',
@@ -84,13 +89,27 @@ router.get('/public/config', async (req: Request, res: Response) => {
       temps_estime: config['temps_estime'] || '5 minutes',
       restriction_mode: (['none', 'delay', 'unique'].includes(config['restriction_mode']) ? config['restriction_mode'] : 'delay') as any,
       restriction_jours: parseInt(config['restriction_jours'] || '30', 10) || 30,
-      nombre_questions_actives: qCountRow ? qCountRow.count : 0
+      nombre_questions_actives: effectiveQuestionCount,
+      pool_actif: poolActif,
+      pool_taille: poolTaille,
+      pool_mode_repartition: config['pool_mode_repartition'] || 'global',
+      ordre_questions: (['fixe', 'aleatoire', 'difficulte_croissante'].includes(config['ordre_questions']) ? config['ordre_questions'] : 'fixe') as any
     });
   } catch (err: any) {
     console.error('Erreur config publique:', err);
     res.status(500).json({ error: 'Erreur lors du chargement de la configuration.' });
   }
 });
+
+// Helper pour mélanger un tableau (algorithme de Fisher-Yates)
+function shuffleArray<T>(arr: T[]): T[] {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
 // Démarrer une nouvelle participation
 router.post('/public/start-session', async (req: Request, res: Response) => {
@@ -120,15 +139,16 @@ router.post('/public/start-session', async (req: Request, res: Response) => {
       finalEntreprise = entreprise.trim();
     }
 
-    // Récupérer les questions actives avec leur version courante
+    // Récupérer les questions actives avec leur version courante et difficulté
     const activeQuestions = query<{
       id: string;
       type: string;
+      difficulte: string;
       position: number;
       version_courante: number;
       version_id: string;
     }>(`
-      SELECT q.id, q.type, q.position, q.version_courante, v.id as version_id
+      SELECT q.id, q.type, COALESCE(q.difficulte, 'moyen') as difficulte, q.position, q.version_courante, v.id as version_id
       FROM questions q
       JOIN versions_questions v ON v.question_id = q.id AND v.version_numero = q.version_courante
       WHERE q.statut = 'actif'
@@ -140,17 +160,66 @@ router.post('/public/start-session', async (req: Request, res: Response) => {
       return;
     }
 
-    // Mode d'ordre : fixe ou aléatoire
+    // Récupérer les paramètres de diffusion et de pool
     const ordreParam = queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'ordre_questions'");
-    const modeAleatoire = ordreParam && ordreParam.valeur === 'aleatoire';
+    const ordreMode = ordreParam?.valeur || 'fixe'; // 'fixe', 'aleatoire', 'difficulte_croissante'
 
-    let questionsOrder = [...activeQuestions];
-    if (modeAleatoire) {
-      // Mélange de Fisher-Yates
-      for (let i = questionsOrder.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [questionsOrder[i], questionsOrder[j]] = [questionsOrder[j], questionsOrder[i]];
+    const poolActifParam = queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'pool_actif'");
+    const poolActif = poolActifParam?.valeur === '1';
+
+    const poolTailleParam = queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'pool_taille'");
+    const poolTaille = parseInt(poolTailleParam?.valeur || '10', 10) || 10;
+
+    const poolModeParam = queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'pool_mode_repartition'");
+    const poolMode = poolModeParam?.valeur || 'global'; // 'global' ou 'par_difficulte'
+
+    const poolNbFacile = parseInt(queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'pool_nb_facile'")?.valeur || '3', 10) || 0;
+    const poolNbMoyen = parseInt(queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'pool_nb_moyen'")?.valeur || '4', 10) || 0;
+    const poolNbDifficile = parseInt(queryOne<{ valeur: string }>("SELECT valeur FROM parametres WHERE cle = 'pool_nb_difficile'")?.valeur || '3', 10) || 0;
+
+    // 1. Sélection des questions (Tirage Pool ou totalité des questions actives)
+    let selectedQuestions: typeof activeQuestions = [];
+
+    if (poolActif) {
+      if (poolMode === 'par_difficulte') {
+        const faciles = shuffleArray(activeQuestions.filter(q => q.difficulte === 'facile'));
+        const moyens = shuffleArray(activeQuestions.filter(q => q.difficulte === 'moyen'));
+        const difficiles = shuffleArray(activeQuestions.filter(q => q.difficulte === 'difficile'));
+
+        const pickedFacile = faciles.slice(0, Math.max(0, poolNbFacile));
+        const pickedMoyen = moyens.slice(0, Math.max(0, poolNbMoyen));
+        const pickedDifficile = difficiles.slice(0, Math.max(0, poolNbDifficile));
+
+        selectedQuestions = [...pickedFacile, ...pickedMoyen, ...pickedDifficile];
+        if (selectedQuestions.length === 0) {
+          selectedQuestions = shuffleArray(activeQuestions).slice(0, Math.min(poolTaille, activeQuestions.length));
+        }
+      } else {
+        // Mode global : tirage aléatoire de N questions
+        const target = Math.max(1, Math.min(poolTaille, activeQuestions.length));
+        selectedQuestions = shuffleArray(activeQuestions).slice(0, target);
       }
+    } else {
+      selectedQuestions = [...activeQuestions];
+    }
+
+    // 2. Ordonnancement des questions sélectionnées
+    let questionsOrder: typeof activeQuestions = [];
+
+    if (ordreMode === 'difficulte_croissante') {
+      // Commence par les questions faciles (aléatoires au sein de la catégorie),
+      // puis moyennes (aléatoires), puis difficiles (aléatoires)
+      const qFaciles = shuffleArray(selectedQuestions.filter(q => q.difficulte === 'facile'));
+      const qMoyens = shuffleArray(selectedQuestions.filter(q => q.difficulte === 'moyen'));
+      const qDifficiles = shuffleArray(selectedQuestions.filter(q => q.difficulte === 'difficile'));
+
+      questionsOrder = [...qFaciles, ...qMoyens, ...qDifficiles];
+    } else if (ordreMode === 'aleatoire') {
+      // Aléatoire complet
+      questionsOrder = shuffleArray(selectedQuestions);
+    } else {
+      // Ordre fixe (respecte la position d'origine)
+      questionsOrder = [...selectedQuestions].sort((a, b) => a.position - b.position);
     }
 
     const sessionQuestions = questionsOrder.map(q => ({
@@ -767,6 +836,7 @@ router.get('/admin/questions', requireAdmin, async (req: AuthRequest, res: Respo
     const questions = query<{
       id: string;
       type: string;
+      difficulte: string;
       position: number;
       statut: string;
       version_courante: number;
@@ -776,7 +846,7 @@ router.get('/admin/questions', requireAdmin, async (req: AuthRequest, res: Respo
       explication: string;
       version_id: string;
     }>(`
-      SELECT q.id, q.type, q.position, q.statut, q.version_courante, q.date_creation, q.date_modification,
+      SELECT q.id, q.type, COALESCE(q.difficulte, 'moyen') as difficulte, q.position, q.statut, q.version_courante, q.date_creation, q.date_modification,
              v.enonce, v.explication, v.id as version_id
       FROM questions q
       JOIN versions_questions v ON v.question_id = q.id AND v.version_numero = q.version_courante
@@ -801,6 +871,7 @@ router.get('/admin/questions', requireAdmin, async (req: AuthRequest, res: Respo
 
       return {
         ...q,
+        difficulte: (['facile', 'moyen', 'difficile'].includes(q.difficulte) ? q.difficulte : 'moyen') as any,
         propositions: props.map(p => ({
           id: p.id,
           texte: p.texte,
@@ -826,7 +897,7 @@ router.get('/admin/questions', requireAdmin, async (req: AuthRequest, res: Respo
 router.post('/admin/questions', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     await getDatabase();
-    const { type, enonce, explication, propositions, statut } = req.body;
+    const { type, difficulte, enonce, explication, propositions, statut } = req.body;
 
     if (!enonce || !enonce.trim()) {
       res.status(400).json({ error: 'L’énoncé de la question est obligatoire.' });
@@ -837,6 +908,8 @@ router.post('/admin/questions', requireAdmin, async (req: AuthRequest, res: Resp
       res.status(400).json({ error: 'Type de question invalide (unique ou multiple).' });
       return;
     }
+
+    const validDiff = ['facile', 'moyen', 'difficile'].includes(difficulte) ? difficulte : 'moyen';
 
     if (!Array.isArray(propositions) || propositions.length < 2) {
       res.status(400).json({ error: 'Une question doit comporter au moins 2 propositions.' });
@@ -862,11 +935,11 @@ router.post('/admin/questions', requireAdmin, async (req: AuthRequest, res: Resp
     const vId = 'vq_' + qId + '_v1';
     const now = new Date().toISOString();
 
-    // 1. Insertion questions
+    // 1. Insertion questions avec difficulte
     run(
-      `INSERT INTO questions (id, type, position, statut, version_courante, date_creation, date_modification)
-       VALUES (?, ?, ?, ?, 1, ?, ?)`,
-      [qId, type, nextPos, statut === 'inactif' ? 'inactif' : 'actif', now, now]
+      `INSERT INTO questions (id, type, difficulte, position, statut, version_courante, date_creation, date_modification)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      [qId, type, validDiff, nextPos, statut === 'inactif' ? 'inactif' : 'actif', now, now]
     );
 
     // 2. Insertion versions_questions
@@ -898,7 +971,7 @@ router.put('/admin/questions/:id', requireAdmin, async (req: AuthRequest, res: R
   try {
     await getDatabase();
     const { id } = req.params;
-    const { type, enonce, explication, propositions, statut } = req.body;
+    const { type, difficulte, enonce, explication, propositions, statut } = req.body;
 
     const question = queryOne<{
       id: string;
@@ -914,6 +987,8 @@ router.put('/admin/questions/:id', requireAdmin, async (req: AuthRequest, res: R
       res.status(400).json({ error: 'L’énoncé est obligatoire.' });
       return;
     }
+
+    const validDiff = ['facile', 'moyen', 'difficile'].includes(difficulte) ? difficulte : 'moyen';
 
     if (!Array.isArray(propositions) || propositions.length < 2) {
       res.status(400).json({ error: 'Au moins 2 propositions sont requises.' });
@@ -958,14 +1033,35 @@ router.put('/admin/questions/:id', requireAdmin, async (req: AuthRequest, res: R
     }
 
     run(
-      `UPDATE questions SET type = ?, statut = ?, date_modification = ? WHERE id = ?`,
-      [type, statut || 'actif', now, id]
+      `UPDATE questions SET type = ?, difficulte = ?, statut = ?, date_modification = ? WHERE id = ?`,
+      [type, validDiff, statut || 'actif', now, id]
     );
 
     res.json({ success: true, message: 'Question mise à jour avec succès.' });
   } catch (err: any) {
     console.error('Erreur update question:', err);
     res.status(500).json({ error: 'Erreur lors de la modification de la question.' });
+  }
+});
+
+// Mettre à jour rapidement la difficulté d'une question
+router.patch('/admin/questions/:id/difficulty', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    await getDatabase();
+    const { id } = req.params;
+    const { difficulte } = req.body;
+
+    if (!['facile', 'moyen', 'difficile'].includes(difficulte)) {
+      res.status(400).json({ error: 'Niveau de difficulté invalide (facile, moyen ou difficile).' });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    run('UPDATE questions SET difficulte = ?, date_modification = ? WHERE id = ?', [difficulte, now, id]);
+
+    res.json({ success: true, message: `Difficulté mise à jour : ${difficulte}` });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erreur lors de la mise à jour de la difficulté.' });
   }
 });
 
@@ -1011,8 +1107,9 @@ router.post('/admin/questions/:id/duplicate', requireAdmin, async (req: AuthRequ
 
     const original = queryOne<{
       type: string;
+      difficulte: string;
       version_courante: number;
-    }>('SELECT type, version_courante FROM questions WHERE id = ?', [id]);
+    }>('SELECT type, COALESCE(difficulte, \'moyen\') as difficulte, version_courante FROM questions WHERE id = ?', [id]);
 
     if (!original) {
       res.status(404).json({ error: 'Question introuvable.' });
@@ -1043,9 +1140,9 @@ router.post('/admin/questions/:id/duplicate', requireAdmin, async (req: AuthRequ
     const now = new Date().toISOString();
 
     run(
-      `INSERT INTO questions (id, type, position, statut, version_courante, date_creation, date_modification)
-       VALUES (?, ?, ?, 'actif', 1, ?, ?)`,
-      [newQId, original.type, nextPos, now, now]
+      `INSERT INTO questions (id, type, difficulte, position, statut, version_courante, date_creation, date_modification)
+       VALUES (?, ?, ?, ?, 'actif', 1, ?, ?)`,
+      [newQId, original.type, original.difficulte || 'moyen', nextPos, now, now]
     );
 
     run(
@@ -1109,6 +1206,81 @@ router.post('/admin/questions/reorder', requireAdmin, async (req: AuthRequest, r
     res.json({ success: true, message: 'Ordre des questions mis à jour.' });
   } catch (err: any) {
     res.status(500).json({ error: 'Erreur lors de la réorganisation des questions.' });
+  }
+});
+
+// Récupérer les paramètres du Pool et d'ordonnancement avec décompte par difficulté
+router.get('/admin/pool-settings', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    await getDatabase();
+    const rows = query<{ cle: string; valeur: string }>('SELECT cle, valeur FROM parametres');
+    const pMap: Record<string, string> = {};
+    rows.forEach(r => { pMap[r.cle] = r.valeur; });
+
+    // Compter par niveau de difficulté pour les questions actives
+    const countFacile = queryOne<{ count: number }>("SELECT COUNT(*) as count FROM questions WHERE statut = 'actif' AND difficulte = 'facile'")?.count || 0;
+    const countMoyen = queryOne<{ count: number }>("SELECT COUNT(*) as count FROM questions WHERE statut = 'actif' AND (difficulte = 'moyen' OR difficulte IS NULL)")?.count || 0;
+    const countDifficile = queryOne<{ count: number }>("SELECT COUNT(*) as count FROM questions WHERE statut = 'actif' AND difficulte = 'difficile'")?.count || 0;
+    const totalActives = queryOne<{ count: number }>("SELECT COUNT(*) as count FROM questions WHERE statut = 'actif'")?.count || 0;
+
+    res.json({
+      ordre_questions: ['fixe', 'aleatoire', 'difficulte_croissante'].includes(pMap['ordre_questions']) ? pMap['ordre_questions'] : 'fixe',
+      pool_actif: pMap['pool_actif'] === '1',
+      pool_taille: parseInt(pMap['pool_taille'] || '10', 10) || 10,
+      pool_mode_repartition: pMap['pool_mode_repartition'] === 'par_difficulte' ? 'par_difficulte' : 'global',
+      pool_nb_facile: parseInt(pMap['pool_nb_facile'] || '3', 10) || 3,
+      pool_nb_moyen: parseInt(pMap['pool_nb_moyen'] || '4', 10) || 4,
+      pool_nb_difficile: parseInt(pMap['pool_nb_difficile'] || '3', 10) || 3,
+      total_questions_actives: totalActives,
+      count_facile: countFacile,
+      count_moyen: countMoyen,
+      count_difficile: countDifficile
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erreur lors du chargement des réglages de pool.' });
+  }
+});
+
+// Enregistrer les paramètres du Pool et d'ordonnancement
+router.put('/admin/pool-settings', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    await getDatabase();
+    const {
+      ordre_questions,
+      pool_actif,
+      pool_taille,
+      pool_mode_repartition,
+      pool_nb_facile,
+      pool_nb_moyen,
+      pool_nb_difficile
+    } = req.body;
+
+    const validOrdre = ['fixe', 'aleatoire', 'difficulte_croissante'].includes(ordre_questions) ? ordre_questions : 'fixe';
+    const validPoolActif = pool_actif ? '1' : '0';
+    const parsedTaille = Math.max(1, parseInt(pool_taille, 10) || 10).toString();
+    const validMode = pool_mode_repartition === 'par_difficulte' ? 'par_difficulte' : 'global';
+    const validNbFacile = Math.max(0, parseInt(pool_nb_facile, 10) || 0).toString();
+    const validNbMoyen = Math.max(0, parseInt(pool_nb_moyen, 10) || 0).toString();
+    const validNbDifficile = Math.max(0, parseInt(pool_nb_difficile, 10) || 0).toString();
+
+    const updates: Record<string, string> = {
+      ordre_questions: validOrdre,
+      pool_actif: validPoolActif,
+      pool_taille: parsedTaille,
+      pool_mode_repartition: validMode,
+      pool_nb_facile: validNbFacile,
+      pool_nb_moyen: validNbMoyen,
+      pool_nb_difficile: validNbDifficile
+    };
+
+    for (const [cle, valeur] of Object.entries(updates)) {
+      run('INSERT OR REPLACE INTO parametres (cle, valeur) VALUES (?, ?)', [cle, valeur]);
+    }
+
+    res.json({ success: true, message: 'Paramètres du Pool et de l’ordre de diffusion enregistrés avec succès.' });
+  } catch (err: any) {
+    console.error('Erreur save pool settings:', err);
+    res.status(500).json({ error: 'Erreur lors de la sauvegarde des paramètres du pool.' });
   }
 });
 
@@ -1805,18 +1977,26 @@ router.put('/admin/settings', requireAdmin, async (req: AuthRequest, res: Respon
       contact_dpo,
       temps_estime,
       restriction_mode,
-      restriction_jours
+      restriction_jours,
+      pool_actif,
+      pool_taille,
+      pool_mode_repartition,
+      pool_nb_facile,
+      pool_nb_moyen,
+      pool_nb_difficile
     } = req.body;
 
     const validMode = ['none', 'delay', 'unique'].includes(restriction_mode) ? restriction_mode : 'delay';
     const parsedJours = parseInt(restriction_jours, 10);
     const validJours = (isNaN(parsedJours) || parsedJours < 1 ? 30 : parsedJours).toString();
 
+    const validOrdre = ['fixe', 'aleatoire', 'difficulte_croissante'].includes(ordre_questions) ? ordre_questions : 'fixe';
+
     const updates: Record<string, string> = {
       quiz_titre: quiz_titre || 'Tous acteurs de notre cybersécurité',
       quiz_sous_titre: quiz_sous_titre || 'Testez vos connaissances et contribuez à une culture numérique plus responsable.',
       quiz_actif: quiz_actif ? '1' : '0',
-      ordre_questions: ordre_questions === 'aleatoire' ? 'aleatoire' : 'fixe',
+      ordre_questions: validOrdre,
       politique_confidentialite: politique_confidentialite || '',
       duree_conservation: duree_conservation || '12 mois',
       contact_dpo: contact_dpo || '',
@@ -1824,6 +2004,25 @@ router.put('/admin/settings', requireAdmin, async (req: AuthRequest, res: Respon
       restriction_mode: validMode,
       restriction_jours: validJours
     };
+
+    if (pool_actif !== undefined) {
+      updates['pool_actif'] = pool_actif ? '1' : '0';
+    }
+    if (pool_taille !== undefined) {
+      updates['pool_taille'] = Math.max(1, parseInt(pool_taille, 10) || 10).toString();
+    }
+    if (pool_mode_repartition !== undefined) {
+      updates['pool_mode_repartition'] = pool_mode_repartition === 'par_difficulte' ? 'par_difficulte' : 'global';
+    }
+    if (pool_nb_facile !== undefined) {
+      updates['pool_nb_facile'] = Math.max(0, parseInt(pool_nb_facile, 10) || 0).toString();
+    }
+    if (pool_nb_moyen !== undefined) {
+      updates['pool_nb_moyen'] = Math.max(0, parseInt(pool_nb_moyen, 10) || 0).toString();
+    }
+    if (pool_nb_difficile !== undefined) {
+      updates['pool_nb_difficile'] = Math.max(0, parseInt(pool_nb_difficile, 10) || 0).toString();
+    }
 
     for (const [cle, valeur] of Object.entries(updates)) {
       run('INSERT OR REPLACE INTO parametres (cle, valeur) VALUES (?, ?)', [cle, valeur]);

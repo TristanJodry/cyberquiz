@@ -13,7 +13,7 @@ import {
   UserCheck,
   RotateCcw
 } from 'lucide-react';
-import { RestrictionMode } from '../../types.ts';
+import { RestrictionMode, QuestionOrderMode } from '../../types.ts';
 import { clearParticipationRestriction } from '../../utils/restriction.ts';
 
 interface AdminSettingsProps {
@@ -26,7 +26,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ token, onSettingsU
   const [titre, setTitre] = useState('');
   const [sousTitre, setSousTitre] = useState('');
   const [quizActif, setQuizActif] = useState(true);
-  const [ordreQuestions, setOrdreQuestions] = useState<'fixe' | 'aleatoire'>('fixe');
+  const [ordreQuestions, setOrdreQuestions] = useState<QuestionOrderMode>('fixe');
   const [politique, setPolitique] = useState('');
   const [dureeConservation, setDureeConservation] = useState('');
   const [contactDpo, setContactDpo] = useState('');
@@ -55,7 +55,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ token, onSettingsU
         setTitre(data.quiz_titre || 'Tous acteurs de notre cybersécurité');
         setSousTitre(data.quiz_sous_titre || 'Testez vos connaissances et contribuez à une culture numérique plus responsable.');
         setQuizActif(data.quiz_actif === '1');
-        setOrdreQuestions(data.ordre_questions === 'aleatoire' ? 'aleatoire' : 'fixe');
+        setOrdreQuestions(['fixe', 'aleatoire', 'difficulte_croissante'].includes(data.ordre_questions) ? data.ordre_questions : 'fixe');
         setPolitique(data.politique_confidentialite || '');
         setDureeConservation(data.duree_conservation || '12 mois');
         setContactDpo(data.contact_dpo || '');
@@ -206,7 +206,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ token, onSettingsU
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               Mode de diffusion des questions
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={() => setOrdreQuestions('fixe')}
@@ -231,9 +231,24 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ token, onSettingsU
                     : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
-                <div className="font-bold text-xs">Mode 2 : Ordre aléatoire</div>
+                <div className="font-bold text-xs">Mode 2 : Ordre 100% aléatoire</div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Mélange automatique pour chaque nouvelle participation, stable pendant toute la session.
+                  Mélange complet de toutes les questions à chaque nouvelle session.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOrdreQuestions('difficulte_croissante')}
+                className={`p-3.5 rounded-xl border text-left cursor-pointer transition ${
+                  ordreQuestions === 'difficulte_croissante'
+                    ? 'bg-cyan-950/60 border-cyan-400 text-white'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <div className="font-bold text-xs">Mode 3 : Difficulté progressive</div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Débute par les questions faciles (mélangées), puis moyennes, puis difficiles.
                 </p>
               </button>
             </div>

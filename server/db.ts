@@ -87,6 +87,7 @@ function initSchemaAndSeed(db: Database) {
     CREATE TABLE IF NOT EXISTS questions (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL CHECK(type IN ('unique', 'multiple')),
+      difficulte TEXT NOT NULL DEFAULT 'moyen' CHECK(difficulte IN ('facile', 'moyen', 'difficile')),
       position INTEGER NOT NULL DEFAULT 1,
       statut TEXT NOT NULL DEFAULT 'actif' CHECK(statut IN ('actif', 'inactif', 'archive')),
       version_courante INTEGER NOT NULL DEFAULT 1,
@@ -171,6 +172,9 @@ function initSchemaAndSeed(db: Database) {
   try {
     db.run("ALTER TABLE rex ADD COLUMN appris_commentaire TEXT DEFAULT NULL");
   } catch (e) {}
+  try {
+    db.run("ALTER TABLE questions ADD COLUMN difficulte TEXT NOT NULL DEFAULT 'moyen'");
+  } catch (e) {}
 
   // Initialisation ou migration du compte administrateur
   const adminSetupFile = path.join(DATA_DIR, '.admin_setup.json');
@@ -235,7 +239,13 @@ function initSchemaAndSeed(db: Database) {
     'contact_dpo': 'dpo-cybersecurite@entreprise.fr',
     'temps_estime': '5 minutes',
     'restriction_mode': 'delay', // 'none', 'delay', 'unique'
-    'restriction_jours': '30'
+    'restriction_jours': '30',
+    'pool_actif': '0', // '0' = inactif, '1' = actif
+    'pool_taille': '10',
+    'pool_mode_repartition': 'global', // 'global' ou 'par_difficulte'
+    'pool_nb_facile': '3',
+    'pool_nb_moyen': '4',
+    'pool_nb_difficile': '3'
   };
 
   for (const [cle, valeur] of Object.entries(defaultParams)) {
@@ -257,8 +267,8 @@ function initSchemaAndSeed(db: Database) {
 
     // 1 question de démonstration à réponse unique
     db.run(
-      `INSERT INTO questions (id, type, position, statut, version_courante, date_creation, date_modification)
-       VALUES (?, 'unique', 1, 'actif', 1, ?, ?)`,
+      `INSERT INTO questions (id, type, difficulte, position, statut, version_courante, date_creation, date_modification)
+       VALUES (?, 'unique', 'facile', 1, 'actif', 1, ?, ?)`,
       [qId, now, now]
     );
 

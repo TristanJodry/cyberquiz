@@ -1,6 +1,7 @@
 export type QuestionType = 'unique' | 'multiple';
+export type QuestionDifficulty = 'facile' | 'moyen' | 'difficile';
 export type QuestionStatus = 'actif' | 'inactif' | 'archive';
-export type QuestionOrderMode = 'fixe' | 'aleatoire';
+export type QuestionOrderMode = 'fixe' | 'aleatoire' | 'difficulte_croissante';
 export type RestrictionMode = 'none' | 'delay' | 'unique';
 
 export interface PublicConfig {
@@ -14,6 +15,24 @@ export interface PublicConfig {
   restriction_mode: RestrictionMode;
   restriction_jours: number;
   nombre_questions_actives: number;
+  pool_actif?: boolean;
+  pool_taille?: number;
+  pool_mode_repartition?: 'global' | 'par_difficulte';
+  ordre_questions?: QuestionOrderMode;
+}
+
+export interface PoolSettings {
+  ordre_questions: QuestionOrderMode;
+  pool_actif: boolean;
+  pool_taille: number;
+  pool_mode_repartition: 'global' | 'par_difficulte';
+  pool_nb_facile: number;
+  pool_nb_moyen: number;
+  pool_nb_difficile: number;
+  total_questions_actives?: number;
+  count_facile?: number;
+  count_moyen?: number;
+  count_difficile?: number;
 }
 
 export interface PropositionClient {
@@ -84,6 +103,7 @@ export interface AdminUser {
 export interface QuestionAdmin {
   id: string;
   type: QuestionType;
+  difficulte: QuestionDifficulty;
   position: number;
   statut: QuestionStatus;
   version_courante: number;
