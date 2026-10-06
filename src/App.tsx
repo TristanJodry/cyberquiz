@@ -17,7 +17,7 @@ export default function App() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
 
   // Session quiz du participant
-  const [participationId, setParticipationId] = useState<string | null>(null);
+  const [participationId, setParticipationId] = useState<string | null>(() => localStorage.getItem('cyberquiz_session_id'));
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(1);
   const [currentQuestion, setCurrentQuestion] = useState<QuestionClient | null>(null);
   const [scoreActuel, setScoreActuel] = useState<number>(0);
@@ -83,6 +83,7 @@ export default function App() {
         if (session.statut === 'termine') {
           // Déjà complété avec REX
           localStorage.removeItem('cyberquiz_session_id');
+          setParticipationId(null);
           setView('home');
         } else if (session.statut === 'quiz_termine') {
           // Quiz terminé, REX en attente
@@ -96,6 +97,7 @@ export default function App() {
         }
       } else {
         localStorage.removeItem('cyberquiz_session_id');
+        setParticipationId(null);
       }
     } catch (e) {
       console.error('Erreur reprise session:', e);
@@ -243,6 +245,7 @@ export default function App() {
 
       // Nettoyer la session terminée
       localStorage.removeItem('cyberquiz_session_id');
+      setParticipationId(null);
       return true;
     } catch (e: any) {
       alert(e.message);
@@ -304,10 +307,9 @@ export default function App() {
             onStartQuiz={handleStartQuiz}
             isLoading={isLoading}
             error={error}
-            hasActiveSession={Boolean(localStorage.getItem('cyberquiz_session_id'))}
+            hasActiveSession={!!participationId}
             onResumeSession={() => {
-              const savedId = localStorage.getItem('cyberquiz_session_id');
-              if (savedId) fetchSessionState(savedId);
+              if (participationId) fetchSessionState(participationId);
             }}
           />
         )}

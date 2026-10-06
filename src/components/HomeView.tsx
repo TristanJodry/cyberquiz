@@ -13,7 +13,8 @@ import {
   Clock, 
   CheckCircle2,
   Calendar,
-  RotateCcw
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { PublicConfig } from '../types.ts';
 import { checkParticipationRestriction } from '../utils/restriction.ts';
@@ -147,34 +148,64 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
           </div>
-        ) : (
-          /* Formulaire de participation */
-          <div className="space-y-4">
-            {/* Reprise de session si une session interrompue est détectée */}
-            {hasActiveSession && onResumeSession && (
-              <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-700/50 flex items-center justify-between gap-4 text-left shadow-lg animate-in slide-in-from-top-2 duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0">
-                    <RotateCcw className="w-5 h-5 text-cyan-400" />
-                  </div>
-                  <div className="text-xs text-cyan-100">
-                    <span className="font-bold block text-sm">Session en cours détectée</span>
-                    <span className="text-cyan-400/80">Vous pouvez reprendre votre progression là où vous vous étiez arrêté.</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={onResumeSession}
-                  className="px-5 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-[0_0_15px_rgba(6,182,212,0.3)] active:scale-95"
-                >
-                  Reprendre
-                </button>
-              </div>
-            )}
+        ) : hasActiveSession && onResumeSession ? (
+          /* Écran "Session en cours" qui bloque le formulaire de nouveau départ */
+          <div className="bg-[#0c142b]/95 border border-cyan-800/60 rounded-3xl p-6 sm:p-9 shadow-[0_10px_35px_rgba(0,0,0,0.5)] backdrop-blur-xl text-center space-y-6 animate-in fade-in duration-300">
+            
+            <div className="w-16 h-16 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 mx-auto flex items-center justify-center shadow-[0_0_25px_rgba(6,182,212,0.3)]">
+              <RotateCcw className="w-9 h-9" />
+            </div>
 
-            <div className="bg-[#0c142b]/95 border border-cyan-900/40 rounded-2xl p-6 sm:p-8 shadow-[0_10px_35px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all">
-              
-              {(error || formError) && (
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-700/60 text-cyan-300 text-xs font-semibold">
+                <Info className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Quiz déjà en cours</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                Reprendre votre progression
+              </h2>
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-lg mx-auto">
+                Une session de quiz est actuellement active sur ce navigateur. Vous pouvez la reprendre là où vous vous étiez arrêté pour finaliser votre participation.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onResumeSession}
+              disabled={isLoading}
+              className="w-full sm:w-auto px-10 py-4 rounded-xl font-extrabold text-slate-950 bg-gradient-to-r from-cyan-400 via-cyan-300 to-teal-300 hover:from-cyan-300 hover:to-teal-200 active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center justify-center gap-3 cursor-pointer mx-auto disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <RefreshCw className="w-5 h-5 animate-spin" />
+              ) : (
+                <RotateCcw className="w-5 h-5" />
+              )}
+              <span>{isLoading ? 'Récupération...' : 'Reprendre le quiz'}</span>
+            </button>
+
+            {/* Pied de carte */}
+            <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-400">
+              <button
+                type="button"
+                onClick={() => setShowPrivacyModal(true)}
+                className="hover:text-cyan-300 transition-colors inline-flex items-center gap-1.5 cursor-pointer underline underline-offset-2"
+              >
+                <LockKeyhole className="w-3.5 h-3.5" />
+                <span>Politique de confidentialité</span>
+              </button>
+
+              {config?.contact_dpo && (
+                <span className="text-slate-400">
+                  Besoin d'aide ? <span className="text-cyan-400 font-medium">{config.contact_dpo}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Formulaire de participation standard */
+          <div className="bg-[#0c142b]/95 border border-cyan-900/40 rounded-2xl p-6 sm:p-8 shadow-[0_10px_35px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all">
+            
+            {(error || formError) && (
               <div className="mb-6 p-4 rounded-xl bg-red-950/60 border border-red-800/80 text-red-200 text-sm flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                 <span>{formError || error}</span>
@@ -303,7 +334,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
             </form>
           </div>
-        </div>
         )}
 
       </div>
