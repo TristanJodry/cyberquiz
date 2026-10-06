@@ -1636,6 +1636,62 @@ router.get('/admin/participations', requireAdmin, async (req: AuthRequest, res: 
   }
 });
 
+// Toggle la validité d'une réponse d'un utilisateur
+router.patch('/admin/participations/:id/responses/:questionId', requireAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    await getDatabase();
+    const { id, questionId } = req.params;
+    const { estCorrect } = req.body; // nouveau statut souhaité (booléen)
+
+    // 1. Trouver la réponse correspondante
+    const participation = queryOne<{ id: string; score_final: number; nombre_questions: number }>('SELECT id, score_final, nombre_questions FROM participations WHERE id = ?', [id]);
+    if (!participation) {
+      res.status(404).json({ error: 'Participation introuvable.' });
+      return;
+    }
+
+    const reponse = queryOne<{ id: string; est_correct: number; points: number }>(`
+      SELECT r.id, r.est_correct, r.points 
+      FROM reponses_utilisateurs r
+      JOIN versions_questions v ON v.id = r.version_question_id
+      WHERE r.participation_id = ? AND v.question_id = ?
+    `, [id, questionId]);
+
+    if (!reponse) {
+      res.status(404).json({ error: 'Réponse introuvable pour cette question.' });
+      return;
+    }
+
+    const nextCorrect = estCorrect ? 1 : 0;
+    const nextPoints = estCorrect ? 1 : 0;
+
+    if (reponse.est_correct === nextCorrect) {
+      res.json({ message: 'Statut déjà identique.', success: true });
+      return;
+    }
+
+    // 2. Mettre à jour la réponse
+    run('UPDATE reponses_utilisateurs SET est_correct = ?, points = ? WHERE id = ?', [nextCorrect, nextPoints, reponse.id]);
+
+    // 3. Recalculer le score de la participation
+    const newScoreRow = queryOne<{ total: number }>('SELECT SUM(points) as total FROM reponses_utilisateurs WHERE participation_id = ?', [id]);
+    const newScore = newScoreRow ? newScoreRow.total : 0;
+    const newPct = Math.round((newScore / participation.nombre_questions) * 100 * 10) / 10;
+
+    run('UPDATE participations SET score_final = ?, pourcentage_reussite = ? WHERE id = ?', [newScore, newPct, id]);
+
+    res.json({ 
+      success: true, 
+      message: 'Réponse mise à jour avec succès.',
+      newScore,
+      newPct
+    });
+  } catch (err: any) {
+    console.error('Erreur toggle response:', err);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour de la réponse.' });
+  }
+});
+
 // Supprimer une participation (politique de conservation des données)
 router.delete('/admin/participations/:id', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {

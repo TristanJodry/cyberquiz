@@ -102,6 +102,33 @@ export const AdminParticipations: React.FC<AdminParticipationsProps> = ({ token 
     }
   };
 
+  const handleToggleResponse = async (participationId: string, questionId: string, currentIsCorrect: boolean) => {
+    try {
+      const res = await fetch(`/api/admin/participations/${participationId}/responses/${questionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ estCorrect: !currentIsCorrect })
+      });
+      if (res.ok) {
+        // Optimistic update of the local state
+        setParticipations(prev => prev.map(p => {
+          if (p.id === participationId) {
+            // Recalculer le score localement (ou on pourrait recharger mais c'est lourd)
+            // On va juste recharger pour être sûr de la cohérence avec les colonnes dynamiques
+            fetchParticipations();
+            return p;
+          }
+          return p;
+        }));
+      }
+    } catch (e) {
+      console.error('Erreur toggle response:', e);
+    }
+  };
+
   const handleExportCsv = () => {
     window.location.href = `/api/admin/export/participations.csv`;
   };
@@ -255,16 +282,22 @@ export const AdminParticipations: React.FC<AdminParticipationsProps> = ({ token 
                     {/* Colonnes dynamiques Q1, Q2, Q3... */}
                     {columns.map((c) => {
                       const resVal = p.questionsResult[c.key] || '-';
+                      const isHandled = resVal === 'Vrai' || resVal === 'Faux';
+                      
                       return (
                         <td key={c.key} className="py-3 px-2 text-center whitespace-nowrap">
-                          {resVal === 'Vrai' ? (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800">
-                              Vrai
-                            </span>
-                          ) : resVal === 'Faux' ? (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-950/80 text-rose-400 border border-rose-800">
-                              Faux
-                            </span>
+                          {isHandled ? (
+                            <button
+                              onClick={() => handleToggleResponse(p.id, c.id, resVal === 'Vrai')}
+                              title={`Cliquer pour passer à ${resVal === 'Vrai' ? 'Faux' : 'Vrai'}`}
+                              className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                resVal === 'Vrai' 
+                                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800 hover:bg-emerald-900/60' 
+                                  : 'bg-rose-950/80 text-rose-400 border-rose-800 hover:bg-rose-900/60'
+                              }`}
+                            >
+                              {resVal}
+                            </button>
                           ) : (
                             <span className="text-slate-600 font-bold">-</span>
                           )}

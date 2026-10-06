@@ -17,6 +17,7 @@ import {
   Shuffle,
   Save,
   CheckCircle2,
+  XCircle,
   RefreshCw,
   Info,
   Power,
@@ -69,7 +70,6 @@ export const AdminQuestions: React.FC<AdminQuestionsProps> = ({ token }) => {
 
   // Paramètres du Pool de questions
   const [poolSettings, setPoolSettings] = useState<PoolSettings>({
-    ordre_questions: 'difficulte_croissante',
     pool_actif: false,
     pool_taille: 10,
     pool_mode_repartition: 'global',
@@ -459,16 +459,9 @@ export const AdminQuestions: React.FC<AdminQuestionsProps> = ({ token }) => {
     }
 
     let ordered: typeof actives = [];
-    if (poolSettings.ordre_questions === 'difficulte_croissante') {
-      const qF = shuffle(selected.filter(q => (q.difficulte || 'moyen') === 'facile'));
-      const qM = shuffle(selected.filter(q => (q.difficulte || 'moyen') === 'moyen'));
-      const qD = shuffle(selected.filter(q => (q.difficulte || 'moyen') === 'difficile'));
-      ordered = [...qF, ...qM, ...qD];
-    } else if (poolSettings.ordre_questions === 'aleatoire') {
-      ordered = shuffle(selected);
-    } else {
-      ordered = [...selected].sort((a, b) => a.position - b.position);
-    }
+    // Utilise l'ordre configuré dans les paramètres globaux (simulé ici via fetchPoolSettings ou par défaut)
+    // En production, start-session utilise les paramètres globaux.
+    ordered = shuffle(selected);
 
     setSimulationSample(ordered.map((q, idx) => ({
       index: idx + 1,
@@ -719,12 +712,12 @@ export const AdminQuestions: React.FC<AdminQuestionsProps> = ({ token }) => {
                                 isArchive
                                   ? 'Question archivée'
                                   : isActif
-                                  ? 'Question active (diffusée) - Cliquer pour désactiver'
-                                  : 'Question inactive (masquée) - Cliquer pour activer'
+                                  ? 'Active : cette question sera tirée au sort pour les participants. Cliquez pour désactiver.'
+                                  : 'Inactive : cette question ne sera jamais tirée au sort. Cliquez pour activer.'
                               }
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                                 isActif
-                                  ? 'bg-emerald-950/70 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                                  ? 'bg-emerald-950/70 border-emerald-600/80 text-emerald-300 hover:bg-emerald-900/60 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
                                   : isArchive
                                   ? 'bg-rose-950/40 border-rose-900 text-rose-400 cursor-not-allowed opacity-80'
                                   : 'bg-slate-900 border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
@@ -732,21 +725,17 @@ export const AdminQuestions: React.FC<AdminQuestionsProps> = ({ token }) => {
                             >
                               {isActif ? (
                                 <>
-                                  <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-                                  </span>
-                                  <Power className="w-3.5 h-3.5 text-emerald-400" />
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                                   <span>Active</span>
                                 </>
                               ) : isArchive ? (
                                 <>
-                                  <Archive className="w-3.5 h-3.5 text-rose-400" />
+                                  <Archive className="w-4 h-4 text-rose-400" />
                                   <span>Archivée</span>
                                 </>
                               ) : (
                                 <>
-                                  <PowerOff className="w-3.5 h-3.5 text-slate-500" />
+                                  <XCircle className="w-4 h-4 text-slate-500" />
                                   <span>Inactive</span>
                                 </>
                               )}

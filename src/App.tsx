@@ -66,7 +66,7 @@ export default function App() {
     }
 
     // Reprise de session participant si existante en cours
-    const savedSessionId = sessionStorage.getItem('cyberquiz_session_id');
+    const savedSessionId = localStorage.getItem('cyberquiz_session_id');
     if (savedSessionId) {
       fetchSessionState(savedSessionId);
     }
@@ -82,7 +82,7 @@ export default function App() {
 
         if (session.statut === 'termine') {
           // Déjà complété avec REX
-          sessionStorage.removeItem('cyberquiz_session_id');
+          localStorage.removeItem('cyberquiz_session_id');
           setView('home');
         } else if (session.statut === 'quiz_termine') {
           // Quiz terminé, REX en attente
@@ -95,7 +95,7 @@ export default function App() {
           setView('quiz');
         }
       } else {
-        sessionStorage.removeItem('cyberquiz_session_id');
+        localStorage.removeItem('cyberquiz_session_id');
       }
     } catch (e) {
       console.error('Erreur reprise session:', e);
@@ -123,7 +123,7 @@ export default function App() {
       setParticipationId(newId);
       setCurrentQuestionIndex(1);
       setScoreActuel(0);
-      sessionStorage.setItem('cyberquiz_session_id', newId);
+      localStorage.setItem('cyberquiz_session_id', newId);
 
       await loadQuestion(newId, 1);
       setView('quiz');
@@ -242,7 +242,7 @@ export default function App() {
       recordParticipationCompletion();
 
       // Nettoyer la session terminée
-      sessionStorage.removeItem('cyberquiz_session_id');
+      localStorage.removeItem('cyberquiz_session_id');
       return true;
     } catch (e: any) {
       alert(e.message);
@@ -304,9 +304,9 @@ export default function App() {
             onStartQuiz={handleStartQuiz}
             isLoading={isLoading}
             error={error}
-            hasActiveSession={Boolean(sessionStorage.getItem('cyberquiz_session_id'))}
+            hasActiveSession={Boolean(localStorage.getItem('cyberquiz_session_id'))}
             onResumeSession={() => {
-              const savedId = sessionStorage.getItem('cyberquiz_session_id');
+              const savedId = localStorage.getItem('cyberquiz_session_id');
               if (savedId) fetchSessionState(savedId);
             }}
           />

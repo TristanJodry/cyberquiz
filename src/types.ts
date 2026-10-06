@@ -22,7 +22,7 @@ export interface PublicConfig {
 }
 
 export interface PoolSettings {
-  ordre_questions: QuestionOrderMode;
+  ordre_questions?: QuestionOrderMode;
   pool_actif: boolean;
   pool_taille: number;
   pool_mode_repartition: 'global' | 'par_difficulte';
