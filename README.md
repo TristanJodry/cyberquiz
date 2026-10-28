@@ -161,3 +161,44 @@ Si une mise à jour doit être annulée :
 - Hashage des mots de passe administrateurs en **bcrypt** (sel aléatoire 10 tours).
 - Protection anti-bruteforce active : 5 échecs consécutifs entraînent un blocage temporaire de l'IP pendant 15 minutes.
 - Données nominatives et mode anonyme strictement cloisonnés.
+
+---
+
+## 7. Déploiement Docker & Docker Compose
+
+L'application peut également être déployée instantanément via **Docker** et **Docker Compose** :
+
+### Démarrage Rapide
+
+```bash
+# 1. Cloner le dépôt et entrer dans le dossier
+git clone https://github.com/VOTRE_COMPTE/VOTRE_DEPOT.git cyberquiz
+cd cyberquiz
+
+# 2. Configurer les variables d'environnement
+cp .env.example .env
+# Modifiez .env pour personnaliser votre JWT_SECRET et vos ports
+
+# 3. Construire et démarrer le conteneur en arrière-plan
+docker compose up -d --build
+
+# 4. Vérifier l'état du conteneur et les logs
+docker compose ps
+docker compose logs -f
+```
+
+L'application sera accessible sur `http://IP_DE_VOTRE_SERVEUR:3080` (port configurable dans `.env`).
+
+### Arrêt et Redémarrage
+
+```bash
+# Arrêter les conteneurs
+docker compose down
+
+# Redémarrer
+docker compose restart
+```
+
+### Persistance des Données SQLite
+Toutes les données du quiz (questions, comptes administrateurs, scores, logs REX) sont stockées dans la base SQLite persistée dans le volume Docker nommé `cyberquiz_data` (ou dans le dossier `./data` si vous avez décommenté la liaison hôte dans `docker-compose.yaml`).
+

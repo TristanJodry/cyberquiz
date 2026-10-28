@@ -1,0 +1,50 @@
+version: '3.8'
+
+# ==============================================================================
+# Docker Compose - CyberQuiz RSE
+# Déploiement conteneurisé (Reverse-Proxy Nginx / Traefik / Accès direct)
+# ==============================================================================
+
+services:
+  cyberquiz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cyberquiz_app
+    restart: unless-stopped
+    ports:
+      # Port exposé sur la machine hôte (évite 3000 et 3001, configurable via APP_PORT dans .env)
+      # Format: IP_HÔTE:PORT_HÔTE:PORT_CONTENEUR (3080 côté hôte redirigé vers 3000 dans le conteneur)
+      - "${APP_BIND_IP:-0.0.0.0}:${APP_PORT:-3080}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - CYBERQUIZ_DATA_DIR=/app/data
+      - JWT_SECRET=${JWT_SECRET:-cyberquiz-production-secret-change-me-in-production}
+    volumes:
+      # Option 1 (recommandée) : Volume Docker nommé géré automatiquement
+      - cyberquiz_data:/app/data
+
+      # Option 2 : Si vous souhaitez lier un dossier local sur l'hôte, décommentez la ligne ci-dessous
+      # et commentez la ligne 'cyberquiz_data:/app/data' :
+      # - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - cyberquiz_network
+
+volumes:
+  # Volume persistant pour la base de données relationnelle SQLite (cyberquiz.db)
+  cyberquiz_data:
+    name: cyberquiz_data
+    driver: local
+
+networks:
+  cyberquiz_network:
+    name: cyberquiz_network
+    driver: bridge
